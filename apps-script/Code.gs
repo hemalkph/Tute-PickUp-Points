@@ -5,6 +5,7 @@
 // Settings (centers, time slots, app link).
 // Student rows turn light green once every ticked tute is collected, and red once the pickup date has passed with tutes still owed.
 
+const ALL = 'All centers'; // Staff → Center value for coordinators who serve every center
 const FIXED = 9; // Students columns A–I; every column after that is a tute (header = tute name)
 
 function setup() {
@@ -32,7 +33,7 @@ function setup() {
 
   // Staff: PIN is text so leading zeros stay; a PIN must be unique and at least 6 characters
   staff.getRange('A:B').setNumberFormat('@');
-  staff.getRange('C2:C').setDataValidation(list(split_(cfg.Centers), false));
+  staff.getRange('C2:C').setDataValidation(list([ALL, ...split_(cfg.Centers)], false));
   staff.setConditionalFormatRules(dup(staff, ['A', 'B']));
 
   // Tute columns: headers are only seeded once, so tutes you add or rename are kept.
@@ -178,7 +179,7 @@ function collect_(index, me, picked) {
     if (!give.length) return { ...r, ok: false, msg: 'Tick at least one tute' };
     const log = SpreadsheetApp.getActive().getSheetByName('Log');
     const now = new Date();
-    give.forEach(t => log.appendRow([now, r.index, r.name, t, me.center, me.name]));
+    give.forEach(t => log.appendRow([now, r.index, r.name, t, r.center || me.center, me.name])); // the student's own center, so an all-centers coordinator still logs a real one
     SpreadsheetApp.flush();
     paint_(r.index);
     const left = r.tutes.filter(t => !give.includes(t));
@@ -280,7 +281,7 @@ function onEdit(e) {
   if (index) paint_(index);
 }
 
-// Today's handouts at this coordinator's center, newest first: one entry per student per handout
+// Today's handouts at this coordinator's center (every center for All centers), newest first: one entry per student per handout
 function recent_(me) {
   const tz = SpreadsheetApp.getActive().getSpreadsheetTimeZone();
   const today = Utilities.formatDate(new Date(), tz, 'yyyy-MM-dd');
@@ -290,7 +291,7 @@ function recent_(me) {
   for (let i = log.length - 1; i > 0; i--) { // the Log is append-only, so stop at the first row from an earlier day
     const [at, index, name, tute, center, staff] = log[i];
     if (Utilities.formatDate(new Date(at), tz, 'yyyy-MM-dd') !== today) break;
-    if (String(center).trim() !== me.center) continue;
+    if (me.center !== ALL && String(center).trim() !== me.center) continue;
     const time = Utilities.formatDate(new Date(at), tz, 'h:mm a');
     const last = items[items.length - 1];
     total++;
@@ -301,12 +302,12 @@ function recent_(me) {
 }
 
 // Pure rule check — tested in test.js.
-// s.tutes = tutes ticked on the student's row, given = { tute: {center, when} } already collected.
+// center = the coordinator's center, or ALL. s.tutes = tutes ticked on the student's row, given = { tute: {center, when} } already collected.
 function decide(s, center, given) {
   if (!s) return { ok: false, msg: 'Index not found' };
-  const who = { name: s.name, index: s.index };
+  const who = { name: s.name, index: s.index, center: s.center };
   if (s.delivery === 'Courier') return { ...who, ok: false, msg: 'Courier student – tutes are posted home' };
-  if (s.center !== center) return { ...who, ok: false, msg: `Registered for ${s.center || 'no center'}, not ${center}` };
+  if (center !== ALL && s.center !== center) return { ...who, ok: false, msg: `Registered for ${s.center || 'no center'}, not ${center}` };
   if (!s.paid) return { ...who, ok: false, msg: 'Fee not paid' };
   if (!s.tutes.length) return { ...who, ok: false, msg: 'No tutes ticked for this student' };
   const done = s.tutes.filter(t => given[t]).map(t => `Has ${t} (${given[t].center}, ${given[t].when})`);

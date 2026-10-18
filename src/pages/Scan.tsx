@@ -80,6 +80,7 @@ export default function Scan({ prefill, onExit }: { prefill: string; onExit: (ms
         >
           <div role="status" className="space-y-1">
             <p className="text-lg font-semibold">{r.name} <span className="font-normal text-green-900/70">({r.index})</span></p>
+            {r.center && <p className="text-sm text-green-900/70">{r.center}</p>}
             <div className="flex items-end gap-3">
               <span className="text-7xl font-semibold leading-none tabular-nums text-green-700">
                 <CountUp key={r.index} to={r.tutes!.length} duration={0.7} trigger="load" />

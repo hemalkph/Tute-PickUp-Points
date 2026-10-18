@@ -14,6 +14,8 @@ const s = { index: '260001', name: 'Kasun', delivery: 'Pickup', center: 'Center 
 assert.strictEqual(decide(null).ok, false);
 assert.match(decide({ ...s, delivery: 'Courier' }, 'Center B', {}).msg, /Courier/);
 assert.match(decide(s, 'Center A', {}).msg, /Registered for Center B/);
+assert.strictEqual(decide(s, 'All centers', {}).ok, true); // all-centers coordinator may serve any center
+assert.match(decide({ ...s, paid: false }, 'All centers', {}).msg, /not paid/); // other rules still apply
 assert.match(decide({ ...s, paid: false }, 'Center B', {}).msg, /not paid/);
 assert.match(decide({ ...s, tutes: [] }, 'Center B', {}).msg, /No tutes ticked/);
 

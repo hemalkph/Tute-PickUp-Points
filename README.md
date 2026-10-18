@@ -49,7 +49,8 @@ The QR is just `https://<your-app>/?i=<index>`. A student who scans it gets a PI
 
 ### 3. Sheet data
 - **Settings**: edit **Centers** (comma-separated) and **Slot Times** (Pickup Time dropdown). After changing either, run `setup` again.
-- **Staff**: one row per coordinator: **Name**, **PIN** (6+ characters, unique), **Center**. Give each person their own PIN. Names and PINs turn red if repeated.
+- **Staff**: one row per coordinator: **Name**, **PIN** (6+ characters, unique), **Center**. Give each person their own PIN.
+  Pick **All centers** for a coordinator who works at every center: they can hand out to students of any center, the screen shows which center the student belongs to, and Today lists every center. Their handouts are logged under the student's own center. Names and PINs turn red if repeated.
 - **Students**: the 9 fixed columns, then one tick-box column per tute (header = tute name, `Tute 01`…`Tute 20` to start).
   To add a tute, type its name in the next empty header cell and run `setup` again. Keep names unique.
 
