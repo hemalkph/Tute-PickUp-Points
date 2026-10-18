@@ -6,6 +6,8 @@ Coordinators at each center open the app (hosted on **Vercel**), log in with the
 - ❌ red, with the reason: not found / courier student / wrong center / fee not paid / no tutes ticked / **all tutes already collected**
 - Always: last 4 NIC digits (to check the student's ID), the pickup slot, and the tutes the student already has
 
+The app has three screens: **Login** (staff PIN), **Scan** (the green/red verdict) and **Today** (what this center has handed out so far, newest first).
+
 The **Google Sheet** (with an Apps Script) is the database and rule engine. All centers share it live, so a tute can't be collected twice.
 
 ```
@@ -62,11 +64,23 @@ The QR is just `https://<your-app>/?i=<index>`. A student who scans it gets a PI
 
 Coordinators open the Vercel link **in the phone's main browser** (Chrome on Android, Safari on iPhone), not inside WhatsApp, because that's where the camera opens scanned QR codes.
 
+## Row colours in Students
+
+| Colour | Meaning |
+|---|---|
+| light green | every tute ticked on the row has been handed out |
+| red | the **Pickup Date** has passed and ticked tutes are still owed |
+| none | nothing ticked yet, still waiting, no date set, or a courier student |
+
+Colours update by themselves when you edit the sheet and after every handout, and `setup` adds a daily refresh at 1 AM so a student turns red the morning after the date.
+**Tute Pickup → Refresh row colors** forces it. Colours are set by the script, so a fill you add by hand on Students is overwritten.
+
 ## Every month
 
 1. **Paid**: tick students who paid (untick everyone at the start of the month).
 2. **Tute columns**: tick the tutes each student should get. Tutes already collected never show again, so old ticks can stay.
-3. **Pickup Date / Time**: set the new slots, then **Tute Pickup → QR cards** and press **WhatsApp** to message the new time (the QR itself doesn't change).
+   As soon as a new tute is ticked, a green row stops being green until it is handed out.
+3. **Pickup Date / Time**: set the new date (a stale date turns the row red) and slots, then **Tute Pickup → QR cards** and press **WhatsApp** to message the new time (the QR itself doesn't change).
 4. Courier list = filter Students by `Delivery = Courier`. **Log** tab = full record: one row per tute given, with when, where and which coordinator.
 
 ## QR codes → students (WhatsApp)
@@ -87,6 +101,6 @@ npm run build        # the Vercel app (Vercel runs this itself)
 npm run build:cards  # rebuilds apps-script/Cards.html — paste it over the Cards file in Apps Script
 ```
 
-- **Code.gs changed**: Apps Script → **Deploy → Manage deployments → ✏️ → Version: New version**. A *new* deployment changes the link and you'd have to update `APPS_SCRIPT_URL`.
+- **Code.gs changed**: after pasting it, run `setup` once (it adds the daily colour refresh and asks for one new permission), then Apps Script → **Deploy → Manage deployments → ✏️ → Version: New version**. A *new* deployment changes the link and you'd have to update `APPS_SCRIPT_URL`.
 - **Cards.html changed**: paste it into the `Cards` file (no redeploy needed, only the Sheet menu uses it).
 - **Upgrading from the earlier Apps Script–only version**: delete the old **Extra Tutes** column, the **Tutes** tab and the **PIN** row in Settings, then run `setup`.

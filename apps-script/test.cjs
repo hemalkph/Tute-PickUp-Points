@@ -6,7 +6,7 @@ const assert = require('assert');
 const ctx = {};
 vm.createContext(ctx);
 vm.runInContext(fs.readFileSync(__dirname + '/Code.gs', 'utf8'), ctx);
-const { decide, waNumber_, defaultTimes_, split_ } = ctx;
+const { decide, status_, waNumber_, defaultTimes_, split_ } = ctx;
 const plain = v => JSON.parse(JSON.stringify(v)); // vm arrays aren't deepStrictEqual to local ones
 
 const s = { index: '260001', name: 'Kasun', delivery: 'Pickup', center: 'Center B', paid: true, tutes: ['Tute 05', 'Tute 06'] };
@@ -33,6 +33,17 @@ assert.deepStrictEqual(plain(r.done), ['Has Tute 05 (Center B, 14 Sep)']);
 r = decide(s, 'Center B', { 'Tute 05': { center: 'Center B', when: '1 Sep' }, 'Tute 06': { center: 'Center A', when: '2 Sep' } });
 assert.strictEqual(r.ok, false);
 assert.match(r.msg, /All tutes already collected/);
+
+// Row colours
+const row = { delivery: 'Pickup', tutes: ['Tute 05', 'Tute 06'], date: '2026-09-19' };
+assert.strictEqual(status_(row, { 'Tute 05': 1, 'Tute 06': 1 }, '2026-09-25'), 'collected');
+assert.strictEqual(status_(row, { 'Tute 05': 1 }, '2026-09-25'), 'overdue'); // date passed, one tute still owed
+assert.strictEqual(status_(row, { 'Tute 05': 1 }, '2026-09-19'), ''); // due today is not late yet
+assert.strictEqual(status_({ ...row, date: '' }, {}, '2026-09-25'), ''); // no date set
+assert.strictEqual(status_({ ...row, tutes: [] }, {}, '2026-09-25'), ''); // nothing ticked
+assert.strictEqual(status_({ ...row, delivery: 'Courier' }, {}, '2026-09-25'), '');
+// next month: new tute ticked, old ones collected, new date in the future → no colour again
+assert.strictEqual(status_({ ...row, tutes: ['Tute 05', 'Tute 07'], date: '2026-10-20' }, { 'Tute 05': 1 }, '2026-10-01'), '');
 
 assert.strictEqual(waNumber_('0771234567'), '94771234567');
 assert.strictEqual(waNumber_('771234567'), '94771234567');

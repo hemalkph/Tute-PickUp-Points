@@ -61,7 +61,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (r.ok) res.setHeader('Set-Cookie', cookie(sign(r.name!), TTL))
       return res.status(r.ok ? 200 : 401).json(r.ok ? { ok: true, name: r.name, center: r.center } : { ok: false, msg: r.msg })
     }
-    if (!['me', 'check', 'collect'].includes(fn)) return res.status(404).json({ ok: false, msg: 'Not found' })
+    if (!['me', 'check', 'collect', 'recent'].includes(fn)) return res.status(404).json({ ok: false, msg: 'Not found' })
 
     const staff = verify(req.headers.cookie)
     if (!staff) return res.status(401).json({ ok: false, auth: false, msg: 'Please log in' })

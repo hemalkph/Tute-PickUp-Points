@@ -11,9 +11,14 @@ export type Res = {
   done?: string[]
   nic?: string
   slot?: string
+  items?: Handout[] // recent
+  total?: number // recent: tutes handed out today
+  students?: number // recent
 }
 
-type Fn = 'login' | 'logout' | 'me' | 'check' | 'collect'
+export type Handout = { time: string; index: string; name: string; tutes: string[]; staff: string }
+
+type Fn = 'login' | 'logout' | 'me' | 'check' | 'collect' | 'recent'
 
 // Everything goes through the Vercel API (api/[fn].ts); the session is an httpOnly cookie
 export async function api(fn: Fn, body: object = {}): Promise<Res> {
@@ -38,6 +43,12 @@ async function mock(fn: Fn, b: { pin?: string; index?: string; picked?: string[]
   if (fn === 'logout') { loggedIn = false; return { ok: true, msg: '' } }
   if (!loggedIn) return { ok: false, auth: false, msg: 'Please log in' }
   if (fn === 'me') return { ok: true, msg: '', name: 'Nimal', center: 'Center B' }
+  if (fn === 'recent') {
+    return { ok: true, msg: '', total: 4, students: 2, items: [
+      { time: '10:42 AM', index: '260001', name: 'Kasun Perera', tutes: ['Lesson 02', 'Lesson 06 - Theory', 'Lesson 06 - Diagram'], staff: 'Nimal' },
+      { time: '10:31 AM', index: '270066', name: 'Yenuli Vihansa', tutes: ['Lesson 02'], staff: 'Nimal' },
+    ] }
+  }
   if (b.index !== '260001') return { ok: false, msg: 'Index not found' }
   const base = { name: 'Kasun Perera', index: b.index, nic: '5678', slot: 'Sat 21 Sep, 10:30 AM' }
   return fn === 'check'

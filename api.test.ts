@@ -56,6 +56,8 @@ const c = session(r)
 r = await call('check', { index: '260001' }, c)
 assert.strictEqual(r.body.ok, true)
 assert.strictEqual(calls.at(-1).staff, 'Nimal')
+assert.strictEqual((await call('recent', {}, c)).body.ok, true)
+assert.strictEqual((await call('recent', {})).status, 401)
 assert.strictEqual(calls.at(-1).secret, 'sec')
 
 // Tampered cookie body (another staff name, same signature) is rejected

@@ -3,6 +3,7 @@
 // Sheets: Students (master list; after the 9 fixed columns, one tick-box column per tute),
 // Staff (Name, PIN, Center — one row per coordinator), Log (one row per tute handed out),
 // Settings (centers, time slots, app link).
+// Student rows turn light green once every ticked tute is collected, and red once the pickup date has passed with tutes still owed.
 
 const FIXED = 9; // Students columns A–I; every column after that is a tute (header = tute name)
 
@@ -52,11 +53,18 @@ function setup() {
 
   // Red highlight on duplicate Index / Mobile / NIC = same student registered twice
   st.setConditionalFormatRules(dup(st, ['A', 'C', 'D']));
+
+  // Row colours refresh on every edit (onEdit), after each handout, and daily so "overdue" shows the morning after the date
+  if (!ScriptApp.getProjectTriggers().some(t => t.getHandlerFunction() === 'refreshStatus')) {
+    ScriptApp.newTrigger('refreshStatus').timeBased().everyDays(1).atHour(1).create();
+  }
+  paint_();
 }
 
 function onOpen() {
   SpreadsheetApp.getUi().createMenu('Tute Pickup')
     .addItem('QR cards (download / WhatsApp / print)', 'printCards')
+    .addItem('Refresh row colors', 'refreshStatus')
     .addItem('Show API secret (for Vercel)', 'showApiSecret')
     .addToUi();
 }
@@ -123,6 +131,7 @@ function doPost(e) {
     if (b.fn === 'me') return json_({ ok: true, name: me.name, center: me.center });
     if (b.fn === 'check') return json_(lookup_(b.index, me.center));
     if (b.fn === 'collect') return json_(collect_(b.index, me, b.picked));
+    if (b.fn === 'recent') return json_(recent_(me));
     return json_({ ok: false, msg: 'Unknown request' });
   } catch (err) {
     return json_({ ok: false, msg: String(err.message || err) });
@@ -171,6 +180,7 @@ function collect_(index, me, picked) {
     const now = new Date();
     give.forEach(t => log.appendRow([now, r.index, r.name, t, me.center, me.name]));
     SpreadsheetApp.flush();
+    paint_(r.index);
     const left = r.tutes.filter(t => !give.includes(t));
     return { ...r, tutes: [], msg: 'Recorded – given: ' + give.join(', '),
       done: left.length ? ['Still to give later: ' + left.join(', ')] : [] };
@@ -188,24 +198,106 @@ function lookup_(index, center) {
   const [head, ...rows] = ss.getSheetByName('Students').getDataRange().getValues();
   const row = rows.find(r => String(r[0]).trim() === index);
   if (!row) return decide(null);
-  const student = {
-    index,
+
+  // Every tute this student has ever collected, so each tute is handed out once
+  const given = {};
+  Object.entries(logged_(ss)[index] || {}).forEach(([t, g]) => {
+    given[t] = { center: g.center, when: Utilities.formatDate(new Date(g.when), tz, 'd MMM') };
+  });
+
+  const r = decide(student_(head, row, tz), center, given);
+  // Last 4 NIC digits so staff can match the student's ID card — a forwarded QR alone isn't enough
+  return Object.assign(r, { nic: String(row[3]).trim().slice(-4), slot: slot_(row[7], row[8], tz) });
+}
+
+// One Students row as the rules see it. date = pickup date as yyyy-MM-dd, '' if empty or not a date.
+function student_(head, row, tz) {
+  const d = row[7] instanceof Date ? row[7] : new Date(row[7]);
+  return {
+    index: String(row[0]).trim(),
     name: String(row[1]),
     delivery: String(row[4]).trim(),
     center: String(row[5]).trim(),
     paid: row[6] === true,
+    date: isNaN(d) ? '' : Utilities.formatDate(d, tz, 'yyyy-MM-dd'),
     tutes: head.slice(FIXED).map((h, i) => [String(h).trim(), row[FIXED + i]]).filter(([h, on]) => h && on === true).map(([h]) => h),
   };
+}
 
-  // Every tute this student has ever collected, so each tute is handed out once
-  const given = {};
-  ss.getSheetByName('Log').getDataRange().getValues().slice(1)
-    .filter(r => String(r[1]).trim() === index)
-    .forEach(r => { given[String(r[3]).trim()] = { center: r[4], when: Utilities.formatDate(new Date(r[0]), tz, 'd MMM') }; });
+// { index: { tute: { center, when: Date } } } for everything ever handed out
+function logged_(ss) {
+  const out = {};
+  ss.getSheetByName('Log').getDataRange().getValues().slice(1).forEach(r => {
+    const i = String(r[1]).trim();
+    (out[i] = out[i] || {})[String(r[3]).trim()] = { center: r[4], when: r[0] };
+  });
+  return out;
+}
 
-  const r = decide(student, center, given);
-  // Last 4 NIC digits so staff can match the student's ID card — a forwarded QR alone isn't enough
-  return Object.assign(r, { nic: String(row[3]).trim().slice(-4), slot: slot_(row[7], row[8], tz) });
+// What the Students row colour means — pure, tested in test.cjs.
+// 'collected' = has tutes ticked and every one was handed out; 'overdue' = pickup date passed with tutes still owed.
+function status_(s, given, today) {
+  if (s.delivery === 'Courier' || !s.tutes.length) return '';
+  if (s.tutes.every(t => given[t])) return 'collected';
+  return s.date && s.date < today ? 'overdue' : '';
+}
+
+const COLORS = { collected: '#d9ead3', overdue: '#f4b6b6' }; // light green, red
+
+// Colours Students rows (all of them, or just one index). Anything else keeps no fill.
+// ponytail: this resets manual row fills on Students; use the tute tick-boxes and Paid for marking instead
+function paint_(only) {
+  const ss = SpreadsheetApp.getActive();
+  const tz = ss.getSpreadsheetTimeZone();
+  const st = ss.getSheetByName('Students');
+  const [head, ...rows] = st.getDataRange().getValues();
+  const done = logged_(ss);
+  const today = Utilities.formatDate(new Date(), tz, 'yyyy-MM-dd');
+  const color = r => {
+    if (!String(r[0]).trim()) return null;
+    const s = student_(head, r, tz);
+    return COLORS[status_(s, done[s.index] || {}, today)] || null;
+  };
+  if (only) {
+    const i = rows.findIndex(r => String(r[0]).trim() === only);
+    if (i >= 0) st.getRange(i + 2, 1, 1, head.length).setBackground(color(rows[i]));
+  } else if (rows.length) {
+    st.getRange(2, 1, rows.length, head.length).setBackgrounds(rows.map(r => Array(head.length).fill(color(r))));
+  }
+}
+
+function refreshStatus() {
+  paint_();
+}
+
+// Keeps colours live while you tick tutes or change dates. Simple trigger: runs on every edit, no setup needed.
+function onEdit(e) {
+  const sh = e.range.getSheet();
+  if (sh.getName() === 'Log') return paint_();
+  if (sh.getName() !== 'Students' || e.range.getRow() < 2) return;
+  if (e.range.getNumRows() > 1) return paint_();
+  const index = String(sh.getRange(e.range.getRow(), 1).getValue()).trim();
+  if (index) paint_(index);
+}
+
+// Today's handouts at this coordinator's center, newest first: one entry per student per handout
+function recent_(me) {
+  const tz = SpreadsheetApp.getActive().getSpreadsheetTimeZone();
+  const today = Utilities.formatDate(new Date(), tz, 'yyyy-MM-dd');
+  const log = SpreadsheetApp.getActive().getSheetByName('Log').getDataRange().getValues();
+  const items = [];
+  let total = 0;
+  for (let i = log.length - 1; i > 0; i--) { // the Log is append-only, so stop at the first row from an earlier day
+    const [at, index, name, tute, center, staff] = log[i];
+    if (Utilities.formatDate(new Date(at), tz, 'yyyy-MM-dd') !== today) break;
+    if (String(center).trim() !== me.center) continue;
+    const time = Utilities.formatDate(new Date(at), tz, 'h:mm a');
+    const last = items[items.length - 1];
+    total++;
+    if (last && last.index === String(index).trim() && last.time === time) last.tutes.unshift(String(tute));
+    else items.push({ time, index: String(index).trim(), name: String(name), tutes: [String(tute)], staff: String(staff) });
+  }
+  return { ok: true, msg: '', items, total, students: items.length };
 }
 
 // Pure rule check — tested in test.js.
