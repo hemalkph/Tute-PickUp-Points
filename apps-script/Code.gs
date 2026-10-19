@@ -1,7 +1,7 @@
 // Tute pickup checker — Apps Script bound to the Google Sheet.
 // It is only the database + rules: the staff app lives on Vercel, which calls doPost with a shared secret.
 // Sheets: Students (master list; after the 9 fixed columns, one tick-box column per tute),
-// Staff (Name, PIN, Center — one row per coordinator), Log (one row per tute handed out),
+// Tutes (tute names, one per row → Students columns), Staff (Name, PIN, Center — one row per coordinator), Log (one row per tute handed out),
 // Settings (centers, time slots, app link).
 // Student rows turn light green once every ticked tute is collected, and red once the pickup date has passed with tutes still owed.
 
@@ -36,11 +36,16 @@ function setup() {
   staff.getRange('C2:C').setDataValidation(list([ALL, ...split_(cfg.Centers)], false));
   staff.setConditionalFormatRules(dup(staff, ['A', 'B']));
 
-  // Tute columns: headers are only seeded once, so tutes you add or rename are kept.
-  // Add a tute = type its name in the next empty header cell of Students, then run setup again for its tick boxes.
-  if (!st.getRange(1, FIXED + 1).getValue()) {
-    st.getRange(1, FIXED + 1, 1, 20).setValues([Array.from({ length: 20 }, (_, i) => 'Tute ' + String(i + 1).padStart(2, '0'))]).setFontWeight('bold');
+  // Tutes tab = the list of tutes, one per row. Each name there becomes a tick-box column in Students (onEdit keeps it in sync).
+  // First run: the list starts from the tute columns already in Students, or Tute 01–20 on a new sheet.
+  const tutes = sheet_(ss, 'Tutes', ['Tute']);
+  if (tutes.getLastRow() < 2) {
+    const cur = st.getLastColumn() > FIXED
+      ? st.getRange(1, FIXED + 1, 1, st.getLastColumn() - FIXED).getValues()[0].map(h => String(h).trim()).filter(Boolean) : [];
+    const names = cur.length ? cur : Array.from({ length: 20 }, (_, i) => 'Tute ' + String(i + 1).padStart(2, '0'));
+    tutes.getRange(2, 1, names.length, 1).setValues(names.map(n => [n]));
   }
+  syncTutes_();
   st.getRange(2, FIXED + 1, st.getMaxRows() - 1, st.getLastColumn() - FIXED).insertCheckboxes();
 
   // Keep leading zeros in mobile numbers, dropdowns for Delivery/Center/Time, checkbox for Paid, date picker for date
@@ -275,10 +280,34 @@ function refreshStatus() {
 function onEdit(e) {
   const sh = e.range.getSheet();
   if (sh.getName() === 'Log') return paint_();
+  if (sh.getName() === 'Tutes') {
+    // Renaming a tute here renames its Students column (ticks kept). Note the Log keeps the old name for past handouts.
+    const st = sh.getParent().getSheetByName('Students');
+    const head = st.getRange(1, 1, 1, st.getLastColumn()).getValues()[0].map(h => String(h).trim());
+    const from = head.indexOf(String(e.oldValue || '').trim()), to = String(e.value || '').trim();
+    if (e.range.getColumn() === 1 && from >= FIXED && to && !head.includes(to)) st.getRange(1, from + 1).setValue(to);
+    return syncTutes_();
+  }
   if (sh.getName() !== 'Students' || e.range.getRow() < 2) return;
   if (e.range.getNumRows() > 1) return paint_();
   const index = String(sh.getRange(e.range.getRow(), 1).getValue()).trim();
   if (index) paint_(index);
+}
+
+// Adds a Students tick-box column for every name in Tutes that has none yet. Never removes columns (that would lose ticks):
+// to drop a tute, delete its column in Students yourself.
+function syncTutes_() {
+  const ss = SpreadsheetApp.getActive();
+  const st = ss.getSheetByName('Students');
+  const head = st.getRange(1, 1, 1, st.getLastColumn()).getValues()[0].map(h => String(h).trim());
+  const add = [...new Set(ss.getSheetByName('Tutes').getRange('A2:A').getValues().flat().map(v => String(v).trim()))]
+    .filter(n => n && !head.includes(n));
+  if (!add.length) return;
+  const col = Math.max(head.length, FIXED) + 1;
+  const short = col + add.length - 1 - st.getMaxColumns();
+  if (short > 0) st.insertColumnsAfter(st.getMaxColumns(), short);
+  st.getRange(1, col, 1, add.length).setValues([add]).setFontWeight('bold');
+  st.getRange(2, col, st.getMaxRows() - 1, add.length).insertCheckboxes();
 }
 
 // Today's handouts at this coordinator's center (every center for All centers), newest first: one entry per student per handout

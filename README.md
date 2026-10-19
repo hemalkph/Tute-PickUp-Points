@@ -32,7 +32,7 @@ The QR is just `https://<your-app>/?i=<index>`. A student who scans it gets a PI
 1. Create a new Google Sheet. **File → Settings → Time zone** = `(GMT+05:30) Colombo`.
 2. **Extensions → Apps Script**. Delete what's there, paste in `apps-script/Code.gs`.
 3. **+ → HTML**, add two files named exactly (no `.html`): `Cards` ← `apps-script/Cards.html`, `Logo` ← `apps-script/Logo.html` (both are one long line, paste it all).
-4. Select `setup` → **Run** (allow the permissions). It creates **Students**, **Staff**, **Log**, **Settings**.
+4. Select `setup` → **Run** (allow the permissions). It creates **Students**, **Tutes**, **Staff**, **Log**, **Settings**.
 5. **Deploy → New deployment → ⚙ Web app**: Execute as **Me**, Who has access **Anyone**. Copy the link (ends in `/exec`). It's useless without the secret.
 6. Reopen the Sheet → **Tute Pickup → Show API secret (for Vercel)** and copy it.
 
@@ -51,8 +51,10 @@ The QR is just `https://<your-app>/?i=<index>`. A student who scans it gets a PI
 - **Settings**: edit **Centers** (comma-separated) and **Slot Times** (Pickup Time dropdown). After changing either, run `setup` again.
 - **Staff**: one row per coordinator: **Name**, **PIN** (6+ characters, unique), **Center**. Give each person their own PIN.
   Pick **All centers** for a coordinator who works at every center: they can hand out to students of any center, the screen shows which center the student belongs to, and Today lists every center. Their handouts are logged under the student's own center. Names and PINs turn red if repeated.
-- **Students**: the 9 fixed columns, then one tick-box column per tute (header = tute name, `Tute 01`…`Tute 20` to start).
-  To add a tute, type its name in the next empty header cell and run `setup` again. Keep names unique.
+- **Tutes**: the list of tutes, one name per row in column A (`Tute 01`…`Tute 20` to start).
+  Type a new name in the next empty row and a tick-box column with that name appears at the end of **Students** straight away.
+  Renaming a name here renames its Students column (ticks kept). Deleting a row does **not** delete the column; delete it in Students yourself. Keep names unique.
+- **Students**: the 9 fixed columns, then one tick-box column per tute (made from the Tutes tab).
 
   | Index | Name | Mobile | NIC | Delivery | Center | Paid | Pickup Date | Pickup Time | Tute 01 | Tute 02 | … |
   |---|---|---|---|---|---|---|---|---|---|---|---|
@@ -104,4 +106,4 @@ npm run build:cards  # rebuilds apps-script/Cards.html — paste it over the Car
 
 - **Code.gs changed**: after pasting it, run `setup` once (it adds the daily colour refresh and asks for one new permission), then Apps Script → **Deploy → Manage deployments → ✏️ → Version: New version**. A *new* deployment changes the link and you'd have to update `APPS_SCRIPT_URL`.
 - **Cards.html changed**: paste it into the `Cards` file (no redeploy needed, only the Sheet menu uses it).
-- **Upgrading from the earlier Apps Script–only version**: delete the old **Extra Tutes** column, the **Tutes** tab and the **PIN** row in Settings, then run `setup`.
+- **Upgrading from the earlier Apps Script–only version**: delete the old **Extra Tutes** column, the old **Tutes** tab's batch columns (B onward) and the **PIN** row in Settings, then run `setup`.
