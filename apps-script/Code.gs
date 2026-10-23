@@ -94,7 +94,7 @@ function printCards() {
   if (!/^https:\/\//.test(url)) throw new Error('Deploy the Vercel app first, then paste its link (https://…) into Settings → App URL');
   const ss = SpreadsheetApp.getActive();
   const tz = ss.getSpreadsheetTimeZone();
-  const students = ss.getSheetByName('Students').getDataRange().getValues().slice(1)
+  const cards = ss.getSheetByName('Students').getDataRange().getValues().slice(1)
     .filter(r => r[0])
     .map(r => {
       const s = { index: String(r[0]).trim(), name: String(r[1]).trim(), center: String(r[5]).trim(), slot: slot_(r[7], r[8], tz) };
@@ -104,7 +104,9 @@ function printCards() {
       const num = waNumber_(r[2]);
       s.wa = num ? 'https://wa.me/' + num + '?text=' + encodeURIComponent(text) : '';
       return s;
-    })
+    });
+  // One card per index (the QR is the same); a later row for a new month replaces the older one, so the slot is current
+  const students = [...new Map(cards.map(s => [s.index, s])).values()]
     .sort((a, b) => a.center.localeCompare(b.center) || a.index.localeCompare(b.index));
   const logo = HtmlService.createHtmlOutputFromFile('Logo').getContent().trim();
   ss.toast('Building QR cards…');
@@ -202,7 +204,8 @@ function lookup_(index, center) {
   const ss = SpreadsheetApp.getActive();
   const tz = ss.getSpreadsheetTimeZone();
   const [head, ...rows] = ss.getSheetByName('Students').getDataRange().getValues();
-  const row = rows.find(r => String(r[0]).trim() === index);
+  // A student re-registered for a new month has several rows: the bottom one is the current one
+  const row = rows.slice().reverse().find(r => String(r[0]).trim() === index);
   if (!row) return decide(null);
 
   // Every tute this student has ever collected, so each tute is handed out once
@@ -265,8 +268,9 @@ function paint_(only) {
     return COLORS[status_(s, done[s.index] || {}, today)] || null;
   };
   if (only) {
-    const i = rows.findIndex(r => String(r[0]).trim() === only);
-    if (i >= 0) st.getRange(i + 2, 1, 1, head.length).setBackground(color(rows[i]));
+    rows.forEach((r, i) => {
+      if (String(r[0]).trim() === only) st.getRange(i + 2, 1, 1, head.length).setBackground(color(r));
+    });
   } else if (rows.length) {
     st.getRange(2, 1, rows.length, head.length).setBackgrounds(rows.map(r => Array(head.length).fill(color(r))));
   }
